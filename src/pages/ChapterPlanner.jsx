@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/Store';
-import { ArrowLeft, Play, Plus, BookOpen, Trash2 } from 'lucide-react';
+import { ArrowLeft, Play, Plus, BookOpen, Trash2, Filter } from 'lucide-react';
 
 export default function ChapterPlanner() {
   const { subjectId } = useParams();
   const navigate = useNavigate();
-  const { data, addChapter, updateChapter, deleteChapter, updateSubjectProgress } = useStore();
+  const { data, addChapter, updateChapter, deleteChapter, refreshSubjectProgress } = useStore();
+
+  const [activeClass, setActiveClass] = useState('All');
+  const [newChapterName, setNewChapterName] = useState('');
 
   const subject = data.subjects.find(s => s.id === subjectId);
-  const chapters = data.chapters.filter(c => c.subjectId === subjectId);
-
-  const [newChapterName, setNewChapterName] = useState('');
+  const allChapters = data.chapters.filter(c => c.subjectId === subjectId);
+  
+  const filteredChapters = useMemo(() => {
+    if (activeClass === 'All') return allChapters;
+    return allChapters.filter(c => c.classLevel === activeClass);
+  }, [allChapters, activeClass]);
 
   if (!subject) return <div>Subject not found</div>;
 
@@ -20,6 +26,7 @@ export default function ChapterPlanner() {
     if (!newChapterName.trim()) return;
     addChapter({
       subjectId,
+      classLevel: activeClass === 'All' ? '11' : activeClass,
       name: newChapterName,
       status: 'Not Started',
       plannedDate: '',
@@ -37,8 +44,8 @@ export default function ChapterPlanner() {
   const syncUpdateChapter = (id, updates) => {
     updateChapter(id, updates);
     setTimeout(() => {
-        updateSubjectProgress(subjectId);
-    }, 100);
+        refreshSubjectProgress(subjectId);
+    }, 50);
   };
 
   const handleAddLink = (chapId, currentLinks, newLink) => {
@@ -73,15 +80,27 @@ export default function ChapterPlanner() {
           <BookOpen /> {subject.name} Planner
         </h1>
         <p style={{ marginTop: '0.5rem', opacity: 0.8 }}>
-          {chapters.filter(c => c.status === 'Completed').length} / {chapters.length} Chapters Completed
+          {allChapters.filter(c => c.status === 'Completed').length} / {allChapters.length} Total Chapters Completed
         </p>
+      </div>
+
+      <div className="flex gap-2 mb-6" style={{ background: 'var(--color-surface)', padding: '0.5rem', borderRadius: 'var(--radius-md)', display: 'inline-flex', boxShadow: 'var(--shadow-sm)' }}>
+        <button className={`btn ${activeClass === 'All' ? 'btn-primary' : ''}`} onClick={() => setActiveClass('All')} style={{ background: activeClass === 'All' ? 'var(--color-pink-dark)' : 'transparent', color: activeClass === 'All' ? 'white' : 'var(--color-text-light)', boxShadow: 'none' }}>
+          All
+        </button>
+        <button className={`btn ${activeClass === '11' ? 'btn-primary' : ''}`} onClick={() => setActiveClass('11')} style={{ background: activeClass === '11' ? 'var(--color-pink-dark)' : 'transparent', color: activeClass === '11' ? 'white' : 'var(--color-text-light)', boxShadow: 'none' }}>
+          Class 11
+        </button>
+        <button className={`btn ${activeClass === '12' ? 'btn-primary' : ''}`} onClick={() => setActiveClass('12')} style={{ background: activeClass === '12' ? 'var(--color-pink-dark)' : 'transparent', color: activeClass === '12' ? 'white' : 'var(--color-text-light)', boxShadow: 'none' }}>
+          Class 12
+        </button>
       </div>
 
       <form onSubmit={handleAddChapter} className="flex gap-4 mb-6">
         <input 
           type="text" 
           className="input-cute" 
-          placeholder="Add a new chapter..."
+          placeholder={`Add a new ${activeClass !== 'All' ? `Class ${activeClass} ` : ''}chapter...`}
           value={newChapterName}
           onChange={(e) => setNewChapterName(e.target.value)}
           style={{ flex: 1, maxWidth: '400px' }}
@@ -96,6 +115,7 @@ export default function ChapterPlanner() {
           <thead>
             <tr>
               <th>Chapter Name</th>
+              <th>Class</th>
               <th>Status</th>
               <th>Planned Date</th>
               <th style={{ minWidth: '200px' }}>YouTube Links</th>
@@ -103,7 +123,7 @@ export default function ChapterPlanner() {
               <th colSpan="3">Revisions</th>
             </tr>
             <tr>
-              <th colSpan="4"></th>
+              <th colSpan="5"></th>
               <th style={{ fontSize: '0.75rem' }}>Watch</th>
               <th style={{ fontSize: '0.75rem' }}>PYQ & Prac</th>
               <th style={{ fontSize: '0.75rem' }}>R1</th>
@@ -112,14 +132,14 @@ export default function ChapterPlanner() {
             </tr>
           </thead>
           <tbody>
-            {chapters.length === 0 ? (
+            {filteredChapters.length === 0 ? (
               <tr>
-                <td colSpan="9" style={{ textAlign: 'center', color: 'var(--color-text-light)' }}>
-                  No chapters added yet. Start planning! ✨
+                <td colSpan="10" style={{ textAlign: 'center', color: 'var(--color-text-light)', padding: '2rem' }}>
+                  No chapters yet. Start planning! ✨
                 </td>
               </tr>
             ) : (
-              chapters.map(chap => (
+              filteredChapters.map(chap => (
                 <tr key={chap.id}>
                   <td style={{ fontWeight: 500 }}>
                     <div className="flex justify-between items-center gap-2">
@@ -128,7 +148,7 @@ export default function ChapterPlanner() {
                         onClick={() => {
                           if(window.confirm('Delete this chapter?')) {
                             deleteChapter(chap.id);
-                            setTimeout(() => updateSubjectProgress(subjectId), 100);
+                            setTimeout(() => refreshSubjectProgress(subjectId), 50);
                           }
                         }} 
                         style={{ color: 'var(--color-pink-dark)' }}
@@ -137,6 +157,11 @@ export default function ChapterPlanner() {
                         <Trash2 size={14} />
                       </button>
                     </div>
+                  </td>
+                  <td>
+                    <span className="badge badge-medium" style={{ backgroundColor: 'var(--color-beige)' }}>
+                       {chap.classLevel}
+                    </span>
                   </td>
                   <td>
                     <select 

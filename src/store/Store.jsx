@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { defaultChapters } from '../data/syllabus';
 
 const initialSubjects = [
   { id: '1', name: 'Physics', color: 'theme-physics', progress: 0 },
@@ -21,10 +22,49 @@ export const StoreProvider = ({ children }) => {
   const [syncId, setSyncId] = useState(null);
   const [cloudStatus, setCloudStatus] = useState('Initializing...');
 
-  const isFirstLoad = useRef(true);
   const dataRef = useRef(data);
+  const pendingSaveRef = useRef(null);
 
   useEffect(() => { dataRef.current = data; }, [data]);
+
+  const migrateSyllabus = (state) => {
+      let migrated = { ...state };
+      if (!migrated.chapters) migrated.chapters = [];
+      if (!migrated.subjects) migrated.subjects = initialSubjects;
+      
+      const existingNames = new Set(migrated.chapters.map(c => c.name.toLowerCase()));
+      const missingChapters = defaultChapters
+        .filter(sc => !existingNames.has(sc.name.toLowerCase()))
+        .map((sc, i) => ({
+           id: `syl-${Date.now()}-${i}-${sc.subjectId}`,
+           subjectId: sc.subjectId,
+           classLevel: sc.classLevel,
+           name: sc.name,
+           status: 'Not Started',
+           plannedDate: '',
+           youtubeLinks: [],
+           watched: false, pyqDone: false, practiceDone: false,
+           rev1: false, rev2: false, rev3: false
+        }));
+      
+      if (missingChapters.length > 0) {
+          migrated.chapters = [...migrated.chapters, ...missingChapters];
+      }
+
+      migrated.chapters = migrated.chapters.map(c => {
+         if (!c.youtubeLinks) c.youtubeLinks = c.youtubeLink ? [c.youtubeLink] : [];
+         if (!c.classLevel) c.classLevel = '11'; 
+         return c;
+      });
+
+      migrated.subjects = migrated.subjects.map(sub => {
+         const subChaps = migrated.chapters.filter(c => c.subjectId === sub.id);
+         const completed = subChaps.filter(c => c.status === 'Completed').length;
+         const progress = subChaps.length > 0 ? Math.round((completed / subChaps.length) * 100) : 0;
+         return { ...sub, progress };
+      });
+      return migrated;
+  };
 
   useEffect(() => {
     const initializeStore = async () => {
@@ -36,17 +76,21 @@ export const StoreProvider = ({ children }) => {
         setCloudStatus('Syncing Sister Space...');
         
         const fetchCloud = async () => {
+          if (pendingSaveRef.current) return; 
           try {
             const res = await fetch(`/api/jsonblob?id=${shareParam}`);
             if (res.ok) {
               const cloudData = await res.json();
-              if (JSON.stringify(cloudData) !== JSON.stringify(dataRef.current)) {
-                setData(cloudData);
+              const migratedCloud = migrateSyllabus(cloudData); // ALWAYS ensure syllabus
+              
+              if (JSON.stringify(migratedCloud) !== JSON.stringify(dataRef.current)) {
+                setData(migratedCloud);
+                // Also trigger an immediate cloud save so the cloud blob actually gets the missing chapters natively
+                saveToCloud(migratedCloud, shareParam);
               }
               setCloudStatus('Co-op Live Sync 🌸');
             }
           } catch (e) {
-            console.error('Fetch error:', e);
             setCloudStatus('Sync Error');
           }
         };
@@ -62,11 +106,10 @@ export const StoreProvider = ({ children }) => {
         try { localData = JSON.parse(saved); } catch(e){}
       }
       
-      localData.chapters = localData.chapters.map(c => {
-         if (!c.youtubeLinks) c.youtubeLinks = c.youtubeLink ? [c.youtubeLink] : [];
-         return c;
-      });
+      localData = migrateSyllabus(localData);
+
       setData(localData);
+      localStorage.setItem('nityaVerseData', JSON.stringify(localData));
 
       let savedSyncId = localStorage.getItem('nityaVerseSyncId');
       
@@ -88,7 +131,6 @@ export const StoreProvider = ({ children }) => {
              setCloudStatus('Local Only');
           }
         } catch (e) {
-             console.error('Failed to create blob', e);
              setCloudStatus('Local Only');
         }
       } else {
@@ -96,101 +138,110 @@ export const StoreProvider = ({ children }) => {
         setCloudStatus('Saved to Cloud');
         
         try {
-            const res = await fetch(`/api/jsonblob?id=${savedSyncId}`);
-            if (res.ok) setData(await res.json());
-        } catch (e) {}
+            await fetch(`/api/jsonblob?id=${savedSyncId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(localData)
+            });
+        } catch(e){}
       }
     };
 
     initializeStore();
   }, []);
 
-  const debounceRef = useRef(null);
-
-  useEffect(() => {
-    if (isFirstLoad.current) {
-        isFirstLoad.current = false;
-        return;
-    }
-    
-    localStorage.setItem('nityaVerseData', JSON.stringify(data));
-    
-    if (syncId) {
+  const saveToCloud = (newData, forceId = syncId) => {
+    localStorage.setItem('nityaVerseData', JSON.stringify(newData));
+    if (forceId) {
       setCloudStatus('Saving...');
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (pendingSaveRef.current) clearTimeout(pendingSaveRef.current);
       
-      debounceRef.current = setTimeout(async () => {
+      pendingSaveRef.current = setTimeout(async () => {
         try {
-          const r = await fetch(`/api/jsonblob?id=${syncId}`, {
+          const r = await fetch(`/api/jsonblob?id=${forceId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(dataRef.current)
+            body: JSON.stringify(newData)
           });
           if (!r.ok) throw new Error('PUT Failed');
           setCloudStatus('Saved to Cloud');
         } catch (e) {
           setCloudStatus('Sync Error');
+        } finally {
+          pendingSaveRef.current = null;
         }
       }, 1500);
     }
-  }, [data, syncId]);
+  };
 
-  const updateSubjectProgress = (subjectId) => {
-    setData(prev => {
-      const subjectChapters = prev.chapters.filter(c => c.subjectId === subjectId);
-      const completed = subjectChapters.filter(c => c.status === 'Completed').length;
-      const progress = subjectChapters.length > 0 ? Math.round((completed / subjectChapters.length) * 100) : 0;
-      
-      const newSubjects = prev.subjects.map(sub => 
-        sub.id === subjectId ? { ...sub, progress } : sub
-      );
-      return { ...prev, subjects: newSubjects };
-    });
+  const updateSubjectProgress = (newData, subjectId) => {
+    const subjectChapters = newData.chapters.filter(c => c.subjectId === subjectId);
+    const completed = subjectChapters.filter(c => c.status === 'Completed').length;
+    const progress = subjectChapters.length > 0 ? Math.round((completed / subjectChapters.length) * 100) : 0;
+    
+    const newSubjects = newData.subjects.map(sub => 
+      sub.id === subjectId ? { ...sub, progress } : sub
+    );
+    return { ...newData, subjects: newSubjects };
   };
 
   const addChapter = (chapter) => {
-    setData(prev => ({
-      ...prev,
-      chapters: [...prev.chapters, { ...chapter, id: Date.now().toString() }]
-    }));
-    updateSubjectProgress(chapter.subjectId);
+    setData(prev => {
+      const next = { ...prev, chapters: [...prev.chapters, { ...chapter, id: Date.now().toString() }] };
+      const nextWithProgress = updateSubjectProgress(next, chapter.subjectId);
+      saveToCloud(nextWithProgress);
+      return nextWithProgress;
+    });
   };
 
   const updateChapter = (chapterId, updates) => {
-    setData(prev => ({
-      ...prev,
-      chapters: prev.chapters.map(chap => 
+    setData(prev => {
+      const next = { ...prev, chapters: prev.chapters.map(chap => 
         chap.id === chapterId ? { ...chap, ...updates } : chap
-      )
-    }));
+      )};
+      saveToCloud(next);
+      return next;
+    });
   };
 
   const deleteChapter = (chapterId) => {
-    setData(prev => ({
-      ...prev,
-      chapters: prev.chapters.filter(c => c.id !== chapterId)
-    }));
+    setData(prev => {
+      const next = { ...prev, chapters: prev.chapters.filter(c => c.id !== chapterId) };
+      saveToCloud(next);
+      return next;
+    });
+  };
+
+  const refreshSubjectProgress = (subjectId) => {
+    setData(prev => {
+      const next = updateSubjectProgress(prev, subjectId);
+      saveToCloud(next);
+      return next;
+    });
   };
 
   const addDailyTask = (task) => {
-    setData(prev => ({
-      ...prev,
-      dailyTasks: [...prev.dailyTasks, { ...task, id: Date.now().toString() }]
-    }));
+    setData(prev => {
+      const next = { ...prev, dailyTasks: [...prev.dailyTasks, { ...task, id: Date.now().toString() }] };
+      saveToCloud(next);
+      return next;
+    });
   };
 
   const updateDailyTask = (taskId, updates) => {
-    setData(prev => ({
-      ...prev,
-      dailyTasks: prev.dailyTasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
-    }));
+    setData(prev => {
+      const next = { ...prev, dailyTasks: prev.dailyTasks.map(t => t.id === taskId ? { ...t, ...updates } : t) };
+      saveToCloud(next);
+      return next;
+    });
   };
 
   const deleteDailyTask = (taskId) => {
-    setData(prev => ({
-      ...prev,
-      dailyTasks: prev.dailyTasks.filter(t => t.id !== taskId)
-    }));
+    setData(prev => {
+      const next = { ...prev, dailyTasks: prev.dailyTasks.filter(t => t.id !== taskId) };
+      saveToCloud(next);
+      return next;
+    });
   };
 
   const generateShareLink = () => {
@@ -209,7 +260,7 @@ export const StoreProvider = ({ children }) => {
       addChapter,
       updateChapter,
       deleteChapter,
-      updateSubjectProgress,
+      refreshSubjectProgress,
       addDailyTask,
       updateDailyTask,
       deleteDailyTask,
