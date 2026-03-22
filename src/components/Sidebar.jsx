@@ -12,10 +12,37 @@ export default function Sidebar() {
     alert('Shareable link copied to clipboard!');
   };
 
+  // Countdown Logic
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  let examDate = new Date(currentYear, 3, 23); // April is index 3
+  if (today > examDate) {
+      examDate = new Date(currentYear + 1, 3, 23); // Future-proofing
+  }
+  const daysLeft = Math.ceil((examDate - today) / (1000 * 60 * 60 * 24));
+  
+  const formattedToday = today.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+  });
+
   return (
     <aside className="sidebar">
-      <div className="mb-6 title-cute">
-        <h2 style={{ margin: 0 }}>NityaVerse 🌸</h2>
+      <div className="mb-6 flex-col">
+        <div className="title-cute mb-2">
+          <h2 style={{ margin: 0 }}>NityaVerse 🌸</h2>
+        </div>
+        
+        <div style={{ padding: '0.8rem', background: 'rgba(255, 255, 255, 0.6)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--color-text-light)', marginBottom: '0.3rem', fontWeight: 500 }}>
+            📅 {formattedToday}
+          </div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-pink-dark)' }}>
+             🚀 {daysLeft} Days Left
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '0.2rem' }}>
+             Until Goal Day ✨
+          </div>
+        </div>
       </div>
 
       <nav className="flex-col gap-2">
