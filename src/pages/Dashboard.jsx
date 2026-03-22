@@ -9,9 +9,40 @@ export default function Dashboard() {
   const completedChapters = data.chapters.filter(c => c.status === 'Completed').length;
   const overallProgress = totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0;
   
-  const completedToday = data.dailyTasks.filter(t => t.completed && t.date === new Date().toISOString().split('T')[0]).length;
-  let streak = completedToday > 0 ? 1 : 0;
+  const calculateStreak = (tasks) => {
+    const completedDates = [...new Set(
+      tasks.filter(t => t.completed).map(t => t.date)
+    )].sort((a, b) => new Date(b) - new Date(a));
 
+    if (completedDates.length === 0) return 0;
+
+    let currentStreak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const firstDate = new Date(completedDates[0]);
+    firstDate.setHours(0, 0, 0, 0);
+    
+    const diffDaysFirst = Math.floor((today - firstDate) / (1000 * 60 * 60 * 24));
+    
+    if (diffDaysFirst > 1) return 0; // Streak is lost if gap is > 1 day
+
+    let expectedDate = new Date(firstDate);
+    for (let i = 0; i < completedDates.length; i++) {
+        const d = new Date(completedDates[i]);
+        d.setHours(0, 0, 0, 0);
+        
+        if (d.getTime() === expectedDate.getTime()) {
+            currentStreak++;
+            expectedDate.setDate(expectedDate.getDate() - 1);
+        } else {
+            break; 
+        }
+    }
+    return currentStreak;
+  };
+
+  const streak = calculateStreak(data.dailyTasks);
   return (
     <div className="animate-fade-in">
       <div className="header-banner">
