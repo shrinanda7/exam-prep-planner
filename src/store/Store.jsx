@@ -37,7 +37,7 @@ export const StoreProvider = ({ children }) => {
         
         const fetchCloud = async () => {
           try {
-            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${shareParam}`);
+            const res = await fetch(`/api/jsonblob?id=${shareParam}`);
             if (res.ok) {
               const cloudData = await res.json();
               if (JSON.stringify(cloudData) !== JSON.stringify(dataRef.current)) {
@@ -73,14 +73,14 @@ export const StoreProvider = ({ children }) => {
       if (!savedSyncId) {
         try {
           setCloudStatus('Creating Cloud Space...');
-          const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+          const res = await fetch('/api/jsonblob', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(localData)
           });
-          const location = res.headers.get('Location');
-          if (location) {
-            savedSyncId = location.split('/').pop();
+          const { id } = await res.json();
+          if (id) {
+            savedSyncId = id;
             localStorage.setItem('nityaVerseSyncId', savedSyncId);
             setSyncId(savedSyncId);
             setCloudStatus('Saved to Cloud');
@@ -88,6 +88,7 @@ export const StoreProvider = ({ children }) => {
              setCloudStatus('Local Only');
           }
         } catch (e) {
+             console.error('Failed to create blob', e);
              setCloudStatus('Local Only');
         }
       } else {
@@ -95,7 +96,7 @@ export const StoreProvider = ({ children }) => {
         setCloudStatus('Saved to Cloud');
         
         try {
-            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${savedSyncId}`);
+            const res = await fetch(`/api/jsonblob?id=${savedSyncId}`);
             if (res.ok) setData(await res.json());
         } catch (e) {}
       }
@@ -120,11 +121,12 @@ export const StoreProvider = ({ children }) => {
       
       debounceRef.current = setTimeout(async () => {
         try {
-          await fetch(`https://jsonblob.com/api/jsonBlob/${syncId}`, {
+          const r = await fetch(`/api/jsonblob?id=${syncId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(dataRef.current)
           });
+          if (!r.ok) throw new Error('PUT Failed');
           setCloudStatus('Saved to Cloud');
         } catch (e) {
           setCloudStatus('Sync Error');
