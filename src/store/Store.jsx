@@ -78,7 +78,9 @@ export const StoreProvider = ({ children }) => {
         const fetchCloud = async () => {
           if (pendingSaveRef.current) return; 
           try {
-            const res = await fetch(`/api/jsonblob?id=${shareParam}`);
+            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${shareParam}`, {
+              headers: { 'Accept': 'application/json' }
+            });
             if (res.ok) {
               const cloudData = await res.json();
               const migratedCloud = migrateSyllabus(cloudData); // ALWAYS ensure syllabus
@@ -116,12 +118,13 @@ export const StoreProvider = ({ children }) => {
       if (!savedSyncId) {
         try {
           setCloudStatus('Creating Cloud Space...');
-          const res = await fetch('/api/jsonblob', {
+          const res = await fetch('https://jsonblob.com/api/jsonBlob', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(localData)
           });
-          const { id } = await res.json();
+          const loc = res.headers.get('Location');
+          const id = loc ? loc.split('/').pop() : null;
           if (id) {
             savedSyncId = id;
             localStorage.setItem('nityaVerseSyncId', savedSyncId);
@@ -138,9 +141,9 @@ export const StoreProvider = ({ children }) => {
         setCloudStatus('Saved to Cloud');
         
         try {
-            await fetch(`/api/jsonblob?id=${savedSyncId}`, {
+            await fetch(`https://jsonblob.com/api/jsonBlob/${savedSyncId}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
               body: JSON.stringify(localData)
             });
         } catch(e){}
@@ -158,9 +161,9 @@ export const StoreProvider = ({ children }) => {
       
       pendingSaveRef.current = setTimeout(async () => {
         try {
-          const r = await fetch(`/api/jsonblob?id=${forceId}`, {
+          const r = await fetch(`https://jsonblob.com/api/jsonBlob/${forceId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify(newData)
           });
           if (!r.ok) throw new Error('PUT Failed');
