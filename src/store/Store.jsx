@@ -78,11 +78,12 @@ export const StoreProvider = ({ children }) => {
         const fetchCloud = async () => {
           if (pendingSaveRef.current) return; 
           try {
-            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${shareParam}`, {
-              headers: { 'Accept': 'application/json' }
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${shareParam}`, {
+              headers: { 'Accept': 'application/json', 'X-Master-Key': '$2a$10$kJp8VEsS2EBWQzXmMTu1n.HL95v5G3GK8Uo6y8/2oSbGKgoSB2Jyu' }
             });
             if (res.ok) {
-              const cloudData = await res.json();
+              const jsonResponse = await res.json();
+              const cloudData = jsonResponse.record;
               const migratedCloud = migrateSyllabus(cloudData); // ALWAYS ensure syllabus
               
               if (JSON.stringify(migratedCloud) !== JSON.stringify(dataRef.current)) {
@@ -118,13 +119,18 @@ export const StoreProvider = ({ children }) => {
       if (!savedSyncId) {
         try {
           setCloudStatus('Creating Cloud Space...');
-          const res = await fetch('https://jsonblob.com/api/jsonBlob', {
+          const res = await fetch('https://api.jsonbin.io/v3/b', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json', 
+              'Accept': 'application/json',
+              'X-Master-Key': '$2a$10$kJp8VEsS2EBWQzXmMTu1n.HL95v5G3GK8Uo6y8/2oSbGKgoSB2Jyu',
+              'X-Bin-Private': 'false'
+            },
             body: JSON.stringify(localData)
           });
-          const loc = res.headers.get('Location');
-          const id = loc ? loc.split('/').pop() : null;
+          const jsonResponse = await res.json();
+          const id = jsonResponse.metadata ? jsonResponse.metadata.id : null;
           if (id) {
             savedSyncId = id;
             localStorage.setItem('nityaVerseSyncId', savedSyncId);
@@ -141,9 +147,13 @@ export const StoreProvider = ({ children }) => {
         setCloudStatus('Saved to Cloud');
         
         try {
-            await fetch(`https://jsonblob.com/api/jsonBlob/${savedSyncId}`, {
+            await fetch(`https://api.jsonbin.io/v3/b/${savedSyncId}`, {
               method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json', 
+                'Accept': 'application/json',
+                'X-Master-Key': '$2a$10$kJp8VEsS2EBWQzXmMTu1n.HL95v5G3GK8Uo6y8/2oSbGKgoSB2Jyu'
+              },
               body: JSON.stringify(localData)
             });
         } catch(e){}
@@ -161,9 +171,13 @@ export const StoreProvider = ({ children }) => {
       
       pendingSaveRef.current = setTimeout(async () => {
         try {
-          const r = await fetch(`https://jsonblob.com/api/jsonBlob/${forceId}`, {
+          const r = await fetch(`https://api.jsonbin.io/v3/b/${forceId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json', 
+              'Accept': 'application/json',
+              'X-Master-Key': '$2a$10$kJp8VEsS2EBWQzXmMTu1n.HL95v5G3GK8Uo6y8/2oSbGKgoSB2Jyu'
+            },
             body: JSON.stringify(newData)
           });
           if (!r.ok) throw new Error('PUT Failed');
