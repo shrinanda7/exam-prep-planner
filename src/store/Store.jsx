@@ -92,6 +92,8 @@ export const StoreProvider = ({ children }) => {
                 saveToCloud(migratedCloud, shareParam);
               }
               setCloudStatus('Co-op Live Sync 🌸');
+            } else {
+              setCloudStatus('Link Expired/Invalid');
             }
           } catch (e) {
             setCloudStatus('Sync Error');
@@ -116,7 +118,7 @@ export const StoreProvider = ({ children }) => {
 
       let savedSyncId = localStorage.getItem('nityaVerseSyncId');
       
-      if (!savedSyncId) {
+      const createNewCloudSpace = async () => {
         try {
           setCloudStatus('Creating Cloud Space...');
           const res = await fetch('https://api.jsonbin.io/v3/b', {
@@ -142,12 +144,13 @@ export const StoreProvider = ({ children }) => {
         } catch (e) {
              setCloudStatus('Local Only');
         }
+      };
+
+      if (!savedSyncId) {
+        await createNewCloudSpace();
       } else {
-        setSyncId(savedSyncId);
-        setCloudStatus('Saved to Cloud');
-        
         try {
-            await fetch(`https://api.jsonbin.io/v3/b/${savedSyncId}`, {
+            const putRes = await fetch(`https://api.jsonbin.io/v3/b/${savedSyncId}`, {
               method: 'PUT',
               headers: { 
                 'Content-Type': 'application/json', 
@@ -156,7 +159,14 @@ export const StoreProvider = ({ children }) => {
               },
               body: JSON.stringify(localData)
             });
-        } catch(e){}
+            if (!putRes.ok) throw new Error('Invalid Bin');
+            
+            setSyncId(savedSyncId);
+            setCloudStatus('Saved to Cloud');
+        } catch(e) {
+            localStorage.removeItem('nityaVerseSyncId');
+            await createNewCloudSpace();
+        }
       }
     };
 
